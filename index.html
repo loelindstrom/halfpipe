@@ -441,26 +441,33 @@ function draw() {
   ctx.fillStyle = playerColor; ctx.fill();
 }
 
-function loop() {
-  if (keys['ArrowLeft'])  headingAngle += settings.turnSpeed;
-  if (keys['ArrowRight']) headingAngle -= settings.turnSpeed;
+let lastFrameTime = performance.now();
+
+function loop(now = performance.now()) {
+  const frameScale = Math.min(2, Math.max(0, (now - lastFrameTime) / (1000 / 60)));
+  lastFrameTime = now;
+
+  if (keys['ArrowLeft'])  headingAngle += settings.turnSpeed * frameScale;
+  if (keys['ArrowRight']) headingAngle -= settings.turnSpeed * frameScale;
   if (!keys['ArrowLeft'] && !keys['ArrowRight']) {
-    if (Math.abs(headingAngle) <= settings.turnReturnSpeed) {
+    const turnReturn = settings.turnReturnSpeed * frameScale;
+    if (Math.abs(headingAngle) <= turnReturn) {
       headingAngle = 0;
     } else {
-      headingAngle -= Math.sign(headingAngle) * settings.turnReturnSpeed;
+      headingAngle -= Math.sign(headingAngle) * turnReturn;
     }
   }
   headingAngle = Math.max(-settings.maxHeadingAngle, Math.min(settings.maxHeadingAngle, headingAngle));
 
-  slideSpeed += Math.sin(headingAngle) * settings.slideAcceleration;
-  slideSpeed *= settings.slideFriction;
-  playerAngle += slideSpeed;
+  slideSpeed += Math.sin(headingAngle) * settings.slideAcceleration * frameScale;
+  slideSpeed *= Math.pow(settings.slideFriction, frameScale);
+  playerAngle += slideSpeed * frameScale;
 
   const turnAmount = Math.abs(headingAngle) / settings.maxHeadingAngle;
   const speedAmount = Math.min(1, Math.abs(slideSpeed) / settings.depthSpeedReference);
   const targetDepthT = settings.maxPlayerDepthT * Math.min(1, turnAmount * 0.7 + speedAmount * 0.3);
-  playerDepthT += (targetDepthT - playerDepthT) * settings.playerDepthEasing;
+  const depthEasing = 1 - Math.pow(1 - settings.playerDepthEasing, frameScale);
+  playerDepthT += (targetDepthT - playerDepthT) * depthEasing;
 
   if (playerAngle > Math.PI / 2) {
     playerAngle = Math.PI / 2;
@@ -473,11 +480,11 @@ function loop() {
 
   // Move all arcs forward in Z (toward Z_NEAR), wrap back to Z_FAR when they pass front
   for (let i = 0; i < arcZs.length; i++) {
-    arcZs[i] -= settings.zSpeed;
+    arcZs[i] -= settings.zSpeed * frameScale;
     if (arcZs[i] <= Z_NEAR) arcZs[i] += (Z_FAR - Z_NEAR);
   }
 
-  nextObstacleInZ -= settings.zSpeed;
+  nextObstacleInZ -= settings.zSpeed * frameScale;
   while (nextObstacleInZ <= 0) {
     spawnObstacle();
     nextObstacleInZ += nextObstacleSpacing();
@@ -487,7 +494,7 @@ function loop() {
   for (let i = obstacles.length - 1; i >= 0; i--) {
     const obstacle = obstacles[i];
     if (obstacle.lingerUntil === null) {
-      obstacle.z -= settings.zSpeed;
+      obstacle.z -= settings.zSpeed * frameScale;
     }
 
     const obstacleCircle = getObstacleCircle(obstacle);
