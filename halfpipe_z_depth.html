@@ -1,0 +1,164 @@
+
+<style>
+  #wrap { display: flex; flex-direction: column; align-items: center; padding: 2rem 0; font-family: var(--font-sans); gap: 1rem; }
+  #controls { display: flex; flex-direction: column; gap: 8px; width: 560px; }
+  .row { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--color-text-secondary); }
+  .row input { flex: 1; }
+  .row span { min-width: 38px; text-align: right; font-weight: 500; color: var(--color-text-primary); }
+  #hint { font-size: 13px; color: var(--color-text-secondary); }
+</style>
+<div id="wrap">
+  <canvas id="c" width="560" height="380"></canvas>
+  <div id="hint">← → arrow keys to steer</div>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const CX = W / 2;
+const FRONT_R = 160;
+const FRONT_CY = H - FRONT_R - 10;
+const VP_Y = H * 0.52;
+const NUM_WALL_LINES = 8;
+
+// Z depth: objects move linearly in Z from Z_FAR toward Z_NEAR
+// Perspective projection: screenScale = FOCAL / Z
+const Z_NEAR = 1;
+const Z_FAR  = 40;
+const FOCAL  = Z_NEAR;
+
+// Number of arcs in the halfpipe at the same time:
+let NUM_SLICES = 15;
+// How fast the arcs in the halfpipe move:
+let Z_SPEED = 0.04 * 3;
+
+// Player
+let angle = 0;
+const STEER_SPEED = 0.08;
+const PLAYER_HEIGHT = 30;
+const keys = {};
+
+// Arcs: evenly spaced Z values, cycling
+const arcZs = [];
+function initArcs() {
+  arcZs.length = 0;
+  for (let i = 0; i < NUM_SLICES; i++) {
+    arcZs.push(Z_NEAR + (Z_FAR - Z_NEAR) * (i / NUM_SLICES));
+  }
+}
+initArcs();
+
+let frameCount = 0;
+
+const isDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+// Project a Z depth value to a screen t in [0,1]
+// t=0 → front (Z_NEAR), t=1 → back (Z_FAR)
+function zToT(z) {
+  // Perspective: scale = FOCAL/z, so things shrink with z
+  const scale = FOCAL / z;
+  // Normalize: at Z_NEAR scale=1 (full size), at Z_FAR scale=FOCAL/Z_FAR (tiny)
+  const scaleNear = FOCAL / Z_NEAR;
+  const scaleFar  = FOCAL / Z_FAR;
+  return 1 - (scale - scaleFar) / (scaleNear - scaleFar);
+}
+
+function getSlice(t) {
+  const cy = FRONT_CY + (VP_Y - FRONT_CY) * t;
+  const r  = FRONT_R  * (1 - t * 0.94);
+  return { cx: CX, cy, r };
+}
+
+function arcPoint(cx, cy, r, a) {
+  return {
+    x: cx + r * Math.cos(Math.PI / 2 + a),
+    y: cy + r * Math.sin(Math.PI / 2 + a)
+  };
+}
+
+function draw() {
+  const dark = isDark();
+  ctx.clearRect(0, 0, W, H);
+
+  const rimA      = dark ? 'rgba(200,188,255,' : 'rgba(60,52,160,';
+  const edgeColor = dark ? 'rgba(200,188,255,0.45)' : 'rgba(60,52,160,0.35)';
+  const gridA     = dark ? 'rgba(200,188,255,0.13)' : 'rgba(60,52,160,0.10)';
+  const obsStroke = dark ? '#ff9070' : '#993c1d';
+  const obsFill   = dark ? 'rgba(255,120,80,0.18)' : 'rgba(216,90,48,0.12)';
+
+  const frontSlice = getSlice(0);
+  const backSlice  = getSlice(1);
+  const leftFront  = arcPoint(frontSlice.cx, frontSlice.cy, frontSlice.r, -Math.PI/2);
+  const rightFront = arcPoint(frontSlice.cx, frontSlice.cy, frontSlice.r,  Math.PI/2);
+  const leftBack   = arcPoint(backSlice.cx,  backSlice.cy,  backSlice.r,  -Math.PI/2);
+  const rightBack  = arcPoint(backSlice.cx,  backSlice.cy,  backSlice.r,   Math.PI/2);
+
+  ctx.beginPath(); ctx.moveTo(leftFront.x, leftFront.y); ctx.lineTo(leftBack.x, leftBack.y);
+  ctx.strokeStyle = edgeColor; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(rightFront.x, rightFront.y); ctx.lineTo(rightBack.x, rightBack.y);
+  ctx.strokeStyle = edgeColor; ctx.lineWidth = 1.5; ctx.stroke();
+
+  for (let li = 1; li < NUM_WALL_LINES; li++) {
+    const a = -Math.PI/2 + (Math.PI / NUM_WALL_LINES) * li;
+    const pFront = arcPoint(frontSlice.cx, frontSlice.cy, frontSlice.r, a);
+    const pBack  = arcPoint(backSlice.cx,  backSlice.cy,  backSlice.r,  a);
+    ctx.beginPath(); ctx.moveTo(pFront.x, pFront.y); ctx.lineTo(pBack.x, pBack.y);
+    ctx.strokeStyle = gridA; ctx.lineWidth = 0.8; ctx.stroke();
+  }
+
+  // Draw arcs back to front
+  const arcsCopy = [...arcZs].sort((a, b) => b - a);
+  for (const z of arcsCopy) {
+    const t = zToT(z);
+    if (t < 0.01 || t > 0.99) continue;
+    const s = getSlice(t);
+    const alpha = 0.1 + (1 - t) * 0.65;
+    const lw    = 0.4 + (1 - t) * 2.0;
+    ctx.beginPath();
+    ctx.arc(s.cx, s.cy, s.r, 0, Math.PI);
+    ctx.strokeStyle = rimA + alpha + ')';
+    ctx.lineWidth = lw;
+    ctx.stroke();
+  }
+
+  // Front arc always on top
+  ctx.beginPath();
+  ctx.arc(frontSlice.cx, frontSlice.cy, frontSlice.r, 0, Math.PI);
+  ctx.strokeStyle = rimA + '0.9)'; ctx.lineWidth = 3; ctx.stroke();
+
+  // Player
+  const pos = arcPoint(frontSlice.cx, frontSlice.cy, frontSlice.r, angle);
+  const nx = Math.cos(Math.PI / 2 + angle);
+  const ny = Math.sin(Math.PI / 2 + angle);
+  const playerColor = dark ? '#e8e0ff' : '#3c34a0';
+  ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
+  ctx.lineTo(pos.x - nx * PLAYER_HEIGHT, pos.y - ny * PLAYER_HEIGHT);
+  ctx.strokeStyle = playerColor; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
+  ctx.fillStyle = playerColor; ctx.fill();
+}
+
+function loop() {
+  if (keys['ArrowLeft'])  angle = Math.min( Math.PI/2, angle + STEER_SPEED);
+  if (keys['ArrowRight']) angle = Math.max(-Math.PI/2, angle - STEER_SPEED);
+
+  // Move all arcs forward in Z (toward Z_NEAR), wrap back to Z_FAR when they pass front
+  for (let i = 0; i < arcZs.length; i++) {
+    arcZs[i] -= Z_SPEED;
+    if (arcZs[i] <= Z_NEAR) arcZs[i] += (Z_FAR - Z_NEAR);
+  }
+
+  frameCount++;
+
+  draw();
+  requestAnimationFrame(loop);
+}
+
+document.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (e.key.startsWith('Arrow')) e.preventDefault();
+});
+document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+loop();
+</script>
