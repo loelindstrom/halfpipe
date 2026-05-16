@@ -35,8 +35,15 @@ let NUM_SLICES = 15;
 let Z_SPEED = 0.04 * 3;
 
 // Player
-let angle = 0;
-const STEER_SPEED = 0.08;
+let playerAngle = 0;
+let headingAngle = 0;
+let slideSpeed = 0;
+const TURN_SPEED = 0.080;
+const TURN_RETURN_SPEED = 0.060;
+const MAX_HEADING_ANGLE = Math.PI / 3;
+const SLIDE_ACCELERATION = 0.005;
+const SLIDE_FRICTION = 0.94;
+const EDGE_BOUNCE = 0.35;
 const PLAYER_HEIGHT = 30;
 const keys = {};
 
@@ -124,20 +131,45 @@ function draw() {
   ctx.strokeStyle = rimA + '0.9)'; ctx.lineWidth = 3; ctx.stroke();
 
   // Player
-  const pos = arcPoint(frontSlice.cx, frontSlice.cy, frontSlice.r, angle);
-  const nx = Math.cos(Math.PI / 2 + angle);
-  const ny = Math.sin(Math.PI / 2 + angle);
+  const pos = arcPoint(frontSlice.cx, frontSlice.cy, frontSlice.r, playerAngle);
+  const nx = Math.cos(Math.PI / 2 + playerAngle);
+  const ny = Math.sin(Math.PI / 2 + playerAngle);
+  const tx = -Math.cos(playerAngle);
+  const ty = -Math.sin(playerAngle);
+  const leanX = -nx * Math.cos(headingAngle) + tx * Math.sin(headingAngle);
+  const leanY = -ny * Math.cos(headingAngle) + ty * Math.sin(headingAngle);
   const playerColor = dark ? '#e8e0ff' : '#3c34a0';
   ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
-  ctx.lineTo(pos.x - nx * PLAYER_HEIGHT, pos.y - ny * PLAYER_HEIGHT);
+  ctx.lineTo(pos.x + leanX * PLAYER_HEIGHT, pos.y + leanY * PLAYER_HEIGHT);
   ctx.strokeStyle = playerColor; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.stroke();
   ctx.beginPath(); ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
   ctx.fillStyle = playerColor; ctx.fill();
 }
 
 function loop() {
-  if (keys['ArrowLeft'])  angle = Math.min( Math.PI/2, angle + STEER_SPEED);
-  if (keys['ArrowRight']) angle = Math.max(-Math.PI/2, angle - STEER_SPEED);
+  if (keys['ArrowLeft'])  headingAngle += TURN_SPEED;
+  if (keys['ArrowRight']) headingAngle -= TURN_SPEED;
+  if (!keys['ArrowLeft'] && !keys['ArrowRight']) {
+    if (Math.abs(headingAngle) <= TURN_RETURN_SPEED) {
+      headingAngle = 0;
+    } else {
+      headingAngle -= Math.sign(headingAngle) * TURN_RETURN_SPEED;
+    }
+  }
+  headingAngle = Math.max(-MAX_HEADING_ANGLE, Math.min(MAX_HEADING_ANGLE, headingAngle));
+
+  slideSpeed += Math.sin(headingAngle) * SLIDE_ACCELERATION;
+  slideSpeed *= SLIDE_FRICTION;
+  playerAngle += slideSpeed;
+
+  if (playerAngle > Math.PI / 2) {
+    playerAngle = Math.PI / 2;
+    slideSpeed *= -EDGE_BOUNCE;
+  }
+  if (playerAngle < -Math.PI / 2) {
+    playerAngle = -Math.PI / 2;
+    slideSpeed *= -EDGE_BOUNCE;
+  }
 
   // Move all arcs forward in Z (toward Z_NEAR), wrap back to Z_FAR when they pass front
   for (let i = 0; i < arcZs.length; i++) {
