@@ -1,36 +1,52 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body { margin: 0; background: #fff; color: #111; }
+  body { margin: 0; background: #111; color: #eee; }
+  body.day { background: #fff; color: #111; }
   #wrap { display: flex; flex-direction: column; align-items: center; width: min(560px, calc(100vw - 24px)); margin: 0 auto; padding: 2rem 0; font-family: var(--font-sans); gap: 1rem; }
-  #hud { display: flex; justify-content: space-between; width: 100%; font-size: 14px; font-weight: 600; color: #333; }
+  #hud {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    color: #ddd;
+    font: 700 22px "Courier New", Consolas, "Lucida Console", monospace;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  body.day #hud { color: #333; }
   #score, #highScore { transition: color 120ms ease; }
-  #score.is-record, #highScore.is-record { color: #188038; }
+  #score.is-record, #highScore.is-record { color: #5ecb77; text-shadow: 0 0 10px rgba(94,203,119,0.5); }
+  body.day #score.is-record, body.day #highScore.is-record { color: #188038; text-shadow: none; }
   canvas { display: block; width: 100%; height: auto; touch-action: none; }
-  #hint { font-size: 13px; color: #555; }
+  #hint { font-size: 13px; color: #aaa; }
+  body.day #hint { color: #555; }
   #touchControls { display: none; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
   .steerButton {
     min-height: 64px;
     border: 1px solid #bbb;
     border-radius: 8px;
-    background: #f7f7f7;
-    color: #222;
+    background: #222;
+    color: #eee;
+    border-color: #555;
     font: 28px system-ui, sans-serif;
     touch-action: none;
     user-select: none;
   }
-  #drawerToggle {
+  body.day .steerButton { background: #f7f7f7; color: #222; border-color: #bbb; }
+  #drawerToggle, #themeToggle {
     position: fixed;
     top: 12px;
-    left: 12px;
     z-index: 2;
-    border: 1px solid #bbb;
-    background: #fff;
-    color: #222;
+    border: 1px solid #555;
+    background: #222;
+    color: #eee;
     border-radius: 6px;
     padding: 7px 10px;
     font: 13px system-ui, sans-serif;
     cursor: pointer;
   }
+  #drawerToggle { left: 12px; }
+  #themeToggle { right: 12px; }
+  body.day #drawerToggle, body.day #themeToggle { background: #fff; color: #222; border-color: #bbb; }
   #drawer {
     position: fixed;
     top: 0;
@@ -40,9 +56,9 @@
     box-sizing: border-box;
     padding: 54px 16px 16px;
     overflow: auto;
-    background: rgba(255,255,255,0.96);
-    border-right: 1px solid #ddd;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+    background: rgba(20,20,20,0.97);
+    border-right: 1px solid #333;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.45);
     transform: translateX(-100%);
     transition: transform 160ms ease;
     z-index: 1;
@@ -50,52 +66,61 @@
   }
   #drawer.open { transform: translateX(0); }
   #drawer h2 { margin: 0 0 14px; font-size: 16px; }
-  #drawer h3 { margin: 18px 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: #666; }
+  #drawer h3 { margin: 18px 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: #aaa; }
   .control { display: grid; gap: 6px; margin-bottom: 12px; }
-  .control label { display: flex; justify-content: space-between; gap: 12px; color: #222; }
-  .control output { color: #666; font-variant-numeric: tabular-nums; }
+  .control label { display: flex; justify-content: space-between; gap: 12px; color: #eee; }
+  .control output { color: #aaa; font-variant-numeric: tabular-nums; }
   .control input { width: 100%; }
   #printSettings {
     width: 100%;
     margin-top: 10px;
     border: 1px solid #999;
-    background: #222;
-    color: #fff;
+    background: #eee;
+    color: #111;
     border-radius: 6px;
     padding: 9px 10px;
     font: 13px system-ui, sans-serif;
     cursor: pointer;
   }
-
-  @media (prefers-color-scheme: dark) {
-    body { background: #111; color: #eee; }
-    #drawerToggle { background: #222; color: #eee; border-color: #555; }
-    #drawer { background: rgba(20,20,20,0.97); border-right-color: #333; box-shadow: 0 10px 30px rgba(0,0,0,0.45); }
-    #drawer h3 { color: #aaa; }
-    .control label { color: #eee; }
-    .control output { color: #aaa; }
-    #printSettings { background: #eee; color: #111; border-color: #eee; }
-    #hud { color: #ddd; }
-    #score.is-record, #highScore.is-record { color: #5ecb77; }
-    .steerButton { background: #222; color: #eee; border-color: #555; }
-    #hint { color: #aaa; }
+  #settingsOutput {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 180px;
+    margin-top: 10px;
+    resize: vertical;
+    border: 1px solid #444;
+    border-radius: 6px;
+    background: #111;
+    color: #eee;
+    padding: 10px;
+    font: 12px "Courier New", Consolas, monospace;
   }
+
+  body.day #drawer { background: rgba(255,255,255,0.96); border-right-color: #ddd; box-shadow: 0 10px 30px rgba(0,0,0,0.18); }
+  body.day #drawer h3 { color: #666; }
+  body.day .control label { color: #222; }
+  body.day .control output { color: #666; }
+  body.day #printSettings { background: #222; color: #fff; border-color: #999; }
+  body.day #settingsOutput { background: #fff; color: #111; border-color: #bbb; }
 
   @media (max-width: 680px) {
     #wrap { width: min(560px, calc(100vw - 16px)); padding: 4.5rem 0 1rem; gap: 0.75rem; }
+    #hud { font-size: 17px; }
     #touchControls { display: grid; }
     #hint { display: none; }
   }
 </style>
 <button id="drawerToggle">Tuning</button>
+<button id="themeToggle">Night mode</button>
 <aside id="drawer" aria-label="Game tuning">
   <div id="settingsControls"></div>
   <button id="printSettings">Console print</button>
+  <textarea id="settingsOutput" readonly aria-label="Printed settings"></textarea>
 </aside>
 <div id="wrap">
   <div id="hud">
     <div id="score">Avoided: 0</div>
-    <div id="highScore" class="is-record">High score: 0</div>
+    <div id="highScore" class="is-record">Highscore: 0</div>
   </div>
   <canvas id="c" width="560" height="380"></canvas>
   <div id="hint">← → arrow keys to steer</div>
@@ -111,8 +136,10 @@ const scoreEl = document.getElementById('score');
 const highScoreEl = document.getElementById('highScore');
 const drawer = document.getElementById('drawer');
 const drawerToggle = document.getElementById('drawerToggle');
+const themeToggle = document.getElementById('themeToggle');
 const settingsControls = document.getElementById('settingsControls');
 const printSettings = document.getElementById('printSettings');
+const settingsOutput = document.getElementById('settingsOutput');
 const steerButtons = document.querySelectorAll('.steerButton');
 const W = canvas.width, H = canvas.height;
 const CX = W / 2;
@@ -209,6 +236,7 @@ let nextObstacleInZ = 0;
 let avoidedStreak = 0;
 let highScore = 0;
 let hasHitObstacle = false;
+let isRecordRun = false;
 
 initArcs();
 
@@ -233,13 +261,17 @@ function spawnObstacle() {
 nextObstacleInZ = nextObstacleSpacing();
 
 function updateHud() {
-  const isRecordRun = avoidedStreak > highScore;
+  isRecordRun = avoidedStreak > highScore;
   if (isRecordRun) highScore = avoidedStreak;
 
   scoreEl.textContent = `Avoided: ${avoidedStreak}`;
-  highScoreEl.textContent = `High score: ${highScore}`;
+  highScoreEl.textContent = `Highscore: ${highScore}`;
   scoreEl.classList.toggle('is-record', isRecordRun);
   highScoreEl.classList.toggle('is-record', isRecordRun || !hasHitObstacle);
+}
+
+function isDark() {
+  return !document.body.classList.contains('day');
 }
 
 function formatSettingValue(value, kind) {
@@ -292,11 +324,15 @@ drawerToggle.addEventListener('click', () => {
   drawer.classList.toggle('open');
 });
 
-printSettings.addEventListener('click', () => {
-  console.log(JSON.stringify(settings, null, 2));
+themeToggle.addEventListener('click', () => {
+  document.body.classList.toggle('day');
 });
 
-const isDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
+printSettings.addEventListener('click', () => {
+  const settingsJson = JSON.stringify(settings, null, 2);
+  console.log(settingsJson);
+  settingsOutput.value = settingsJson;
+});
 
 // Project a Z depth value to a screen t in [0,1]
 // t=0 → front (Z_NEAR), t=1 → back (Z_FAR)
@@ -357,9 +393,9 @@ function draw() {
   const dark = isDark();
   ctx.clearRect(0, 0, W, H);
 
-  const rimA      = dark ? 'rgba(200,188,255,' : 'rgba(60,52,160,';
-  const edgeColor = dark ? 'rgba(200,188,255,0.45)' : 'rgba(60,52,160,0.35)';
-  const gridA     = dark ? 'rgba(200,188,255,0.13)' : 'rgba(60,52,160,0.10)';
+  const rimA      = isRecordRun ? 'rgba(94,203,119,' : (dark ? 'rgba(200,188,255,' : 'rgba(60,52,160,');
+  const edgeColor = isRecordRun ? 'rgba(94,203,119,0.55)' : (dark ? 'rgba(200,188,255,0.45)' : 'rgba(60,52,160,0.35)');
+  const gridA     = isRecordRun ? 'rgba(94,203,119,0.18)' : (dark ? 'rgba(200,188,255,0.13)' : 'rgba(60,52,160,0.10)');
   const obstacleFill = dark ? '#ff9b74' : '#b84a24';
   const obstacleStroke = dark ? '#ffd0bf' : '#6e260f';
   const hitHalo = dark ? 'rgba(255,68,68,0.7)' : 'rgba(210,0,0,0.65)';
