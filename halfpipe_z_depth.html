@@ -64,6 +64,8 @@ const OBSTACLE_FREQUENCY = 30;
 const OBSTACLE_INTERVAL_JITTER = 0.45;
 const MIN_OBSTACLE_SPACING_Z = 0.002;
 const COLLISION_DEPTH_WINDOW = 0.045;
+const HIT_HALO_RADIUS_MULTIPLIER = 2.4;
+const HIT_HALO_LINE_WIDTH = 3;
 
 // Arcs: evenly spaced Z values, cycling
 const arcZs = [];
@@ -164,6 +166,7 @@ function draw() {
   const gridA     = dark ? 'rgba(200,188,255,0.13)' : 'rgba(60,52,160,0.10)';
   const obstacleFill = dark ? '#ff9b74' : '#b84a24';
   const obstacleStroke = dark ? '#ffd0bf' : '#6e260f';
+  const hitHalo = dark ? 'rgba(255,68,68,0.7)' : 'rgba(210,0,0,0.65)';
   const frontSlice = getSlice(0);
   const backSlice  = getSlice(1);
   const leftFront  = arcPoint(frontSlice.cx, frontSlice.cy, frontSlice.r, -Math.PI/2);
@@ -208,6 +211,14 @@ function draw() {
   for (const obstacle of obstaclesCopy) {
     const obstacleCircle = getObstacleCircle(obstacle);
     if (obstacleCircle.t < 0.01 || obstacleCircle.t > 0.99) continue;
+
+    if (obstacle.hit) {
+      ctx.beginPath();
+      ctx.arc(obstacleCircle.x, obstacleCircle.y, obstacleCircle.r * HIT_HALO_RADIUS_MULTIPLIER, 0, Math.PI * 2);
+      ctx.strokeStyle = hitHalo;
+      ctx.lineWidth = HIT_HALO_LINE_WIDTH;
+      ctx.stroke();
+    }
 
     ctx.beginPath();
     ctx.arc(obstacleCircle.x, obstacleCircle.y, obstacleCircle.r, 0, Math.PI * 2);
