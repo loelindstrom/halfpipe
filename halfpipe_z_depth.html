@@ -2,20 +2,24 @@
 <style>
   body { margin: 0; background: #fff; color: #111; }
   #wrap { display: flex; flex-direction: column; align-items: center; padding: 2rem 0; font-family: var(--font-sans); gap: 1rem; }
+  #score { font-size: 14px; font-weight: 600; color: #333; }
   #hint { font-size: 13px; color: #555; }
 
   @media (prefers-color-scheme: dark) {
     body { background: #111; color: #eee; }
+    #score { color: #ddd; }
     #hint { color: #aaa; }
   }
 </style>
 <div id="wrap">
   <canvas id="c" width="560" height="380"></canvas>
+  <div id="score">Avoided: 0</div>
   <div id="hint">← → arrow keys to steer</div>
 </div>
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
 const W = canvas.width, H = canvas.height;
 const CX = W / 2;
 const FRONT_R = 160;
@@ -49,7 +53,17 @@ const MAX_PLAYER_DEPTH_T = 0.5;
 const PLAYER_DEPTH_EASING = 0.04;
 const DEPTH_SPEED_REFERENCE = 0.4;
 const PLAYER_HEIGHT = 30;
+const PLAYER_DOT_RADIUS = 6;
 const keys = {};
+
+// Obstacles
+const OBSTACLE_RADIUS = PLAYER_DOT_RADIUS;
+const OBSTACLE_POSITION_SPREAD = Math.PI * 0.44;
+// Roughly how many obstacles are active across one full tunnel length.
+const OBSTACLE_FREQUENCY = 30;
+const OBSTACLE_INTERVAL_JITTER = 0.45;
+const MIN_OBSTACLE_SPACING_Z = 0.002;
+const COLLISION_DEPTH_WINDOW = 0.045;
 
 // Arcs: evenly spaced Z values, cycling
 const arcZs = [];
@@ -59,7 +73,30 @@ function initArcs() {
     arcZs.push(Z_NEAR + (Z_FAR - Z_NEAR) * (i / NUM_SLICES));
   }
 }
+const obstacles = [];
+let nextObstacleInZ = 0;
+let avoidedStreak = 0;
+
 initArcs();
+
+function randomObstacleAngle() {
+  return (Math.random() * 2 - 1) * OBSTACLE_POSITION_SPREAD;
+}
+
+function nextObstacleSpacing() {
+  const baseSpacing = (Z_FAR - Z_NEAR) / Math.max(1, OBSTACLE_FREQUENCY);
+  const jitter = baseSpacing * OBSTACLE_INTERVAL_JITTER;
+  return Math.max(MIN_OBSTACLE_SPACING_Z, baseSpacing + (Math.random() * 2 - 1) * jitter);
+}
+
+function spawnObstacle() {
+  obstacles.push({
+    z: Z_FAR,
+    angle: randomObstacleAngle(),
+    hit: false
+  });
+}
+nextObstacleInZ = nextObstacleSpacing();
 
 const isDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
 
@@ -87,6 +124,37 @@ function arcPoint(cx, cy, r, a) {
   };
 }
 
+function getObstacleCircle(obstacle) {
+  const t = zToT(obstacle.z);
+  const s = getSlice(t);
+  const pos = arcPoint(s.cx, s.cy, s.r, obstacle.angle);
+  return {
+    x: pos.x,
+    y: pos.y,
+    r: OBSTACLE_RADIUS * (s.r / FRONT_R),
+    t
+  };
+}
+
+function getPlayerCircle() {
+  const playerSlice = getSlice(playerDepthT);
+  const playerScale = 1 - playerDepthT * 0.6;
+  const pos = arcPoint(playerSlice.cx, playerSlice.cy, playerSlice.r, playerAngle);
+  return {
+    x: pos.x,
+    y: pos.y,
+    r: PLAYER_DOT_RADIUS * playerScale,
+    scale: playerScale
+  };
+}
+
+function circlesOverlap(a, b) {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  const minDistance = a.r + b.r;
+  return dx * dx + dy * dy <= minDistance * minDistance;
+}
+
 function draw() {
   const dark = isDark();
   ctx.clearRect(0, 0, W, H);
@@ -94,6 +162,8 @@ function draw() {
   const rimA      = dark ? 'rgba(200,188,255,' : 'rgba(60,52,160,';
   const edgeColor = dark ? 'rgba(200,188,255,0.45)' : 'rgba(60,52,160,0.35)';
   const gridA     = dark ? 'rgba(200,188,255,0.13)' : 'rgba(60,52,160,0.10)';
+  const obstacleFill = dark ? '#ff9b74' : '#b84a24';
+  const obstacleStroke = dark ? '#ffd0bf' : '#6e260f';
   const frontSlice = getSlice(0);
   const backSlice  = getSlice(1);
   const leftFront  = arcPoint(frontSlice.cx, frontSlice.cy, frontSlice.r, -Math.PI/2);
@@ -134,10 +204,22 @@ function draw() {
   ctx.arc(frontSlice.cx, frontSlice.cy, frontSlice.r, 0, Math.PI);
   ctx.strokeStyle = rimA + '0.9)'; ctx.lineWidth = 3; ctx.stroke();
 
+  const obstaclesCopy = [...obstacles].sort((a, b) => b.z - a.z);
+  for (const obstacle of obstaclesCopy) {
+    const obstacleCircle = getObstacleCircle(obstacle);
+    if (obstacleCircle.t < 0.01 || obstacleCircle.t > 0.99) continue;
+
+    ctx.beginPath();
+    ctx.arc(obstacleCircle.x, obstacleCircle.y, obstacleCircle.r, 0, Math.PI * 2);
+    ctx.fillStyle = obstacleFill;
+    ctx.fill();
+    ctx.strokeStyle = obstacleStroke;
+    ctx.lineWidth = Math.max(1, obstacleCircle.r * 0.25);
+    ctx.stroke();
+  }
+
   // Player
-  const playerSlice = getSlice(playerDepthT);
-  const playerScale = 1 - playerDepthT * 0.6;
-  const pos = arcPoint(playerSlice.cx, playerSlice.cy, playerSlice.r, playerAngle);
+  const playerCircle = getPlayerCircle();
   const nx = Math.cos(Math.PI / 2 + playerAngle);
   const ny = Math.sin(Math.PI / 2 + playerAngle);
   const tx = -Math.cos(playerAngle);
@@ -145,10 +227,10 @@ function draw() {
   const leanX = -nx * Math.cos(headingAngle) + tx * Math.sin(headingAngle);
   const leanY = -ny * Math.cos(headingAngle) + ty * Math.sin(headingAngle);
   const playerColor = dark ? '#e8e0ff' : '#3c34a0';
-  ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
-  ctx.lineTo(pos.x + leanX * PLAYER_HEIGHT * playerScale, pos.y + leanY * PLAYER_HEIGHT * playerScale);
-  ctx.strokeStyle = playerColor; ctx.lineWidth = 3.5 * playerScale; ctx.lineCap = 'round'; ctx.stroke();
-  ctx.beginPath(); ctx.arc(pos.x, pos.y, 6 * playerScale, 0, Math.PI * 2);
+  ctx.beginPath(); ctx.moveTo(playerCircle.x, playerCircle.y);
+  ctx.lineTo(playerCircle.x + leanX * PLAYER_HEIGHT * playerCircle.scale, playerCircle.y + leanY * PLAYER_HEIGHT * playerCircle.scale);
+  ctx.strokeStyle = playerColor; ctx.lineWidth = 3.5 * playerCircle.scale; ctx.lineCap = 'round'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(playerCircle.x, playerCircle.y, playerCircle.r, 0, Math.PI * 2);
   ctx.fillStyle = playerColor; ctx.fill();
 }
 
@@ -186,6 +268,34 @@ function loop() {
   for (let i = 0; i < arcZs.length; i++) {
     arcZs[i] -= Z_SPEED;
     if (arcZs[i] <= Z_NEAR) arcZs[i] += (Z_FAR - Z_NEAR);
+  }
+
+  nextObstacleInZ -= Z_SPEED;
+  while (nextObstacleInZ <= 0) {
+    spawnObstacle();
+    nextObstacleInZ += nextObstacleSpacing();
+  }
+
+  const playerCircle = getPlayerCircle();
+  for (let i = obstacles.length - 1; i >= 0; i--) {
+    const obstacle = obstacles[i];
+    obstacle.z -= Z_SPEED;
+
+    const obstacleCircle = getObstacleCircle(obstacle);
+    const isCloseInDepth = Math.abs(obstacleCircle.t - playerDepthT) <= COLLISION_DEPTH_WINDOW;
+    if (!obstacle.hit && isCloseInDepth && circlesOverlap(playerCircle, obstacleCircle)) {
+      obstacle.hit = true;
+      avoidedStreak = 0;
+      scoreEl.textContent = `Avoided: ${avoidedStreak}`;
+    }
+
+    if (obstacle.z <= Z_NEAR) {
+      if (!obstacle.hit) {
+        avoidedStreak++;
+        scoreEl.textContent = `Avoided: ${avoidedStreak}`;
+      }
+      obstacles.splice(i, 1);
+    }
   }
 
   draw();
