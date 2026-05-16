@@ -1,11 +1,13 @@
 
 <style>
+  body { margin: 0; background: #fff; color: #111; }
   #wrap { display: flex; flex-direction: column; align-items: center; padding: 2rem 0; font-family: var(--font-sans); gap: 1rem; }
-  #controls { display: flex; flex-direction: column; gap: 8px; width: 560px; }
-  .row { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--color-text-secondary); }
-  .row input { flex: 1; }
-  .row span { min-width: 38px; text-align: right; font-weight: 500; color: var(--color-text-primary); }
-  #hint { font-size: 13px; color: var(--color-text-secondary); }
+  #hint { font-size: 13px; color: #555; }
+
+  @media (prefers-color-scheme: dark) {
+    body { background: #111; color: #eee; }
+    #hint { color: #aaa; }
+  }
 </style>
 <div id="wrap">
   <canvas id="c" width="560" height="380"></canvas>
@@ -48,8 +50,6 @@ function initArcs() {
 }
 initArcs();
 
-let frameCount = 0;
-
 const isDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
 
 // Project a Z depth value to a screen t in [0,1]
@@ -83,9 +83,6 @@ function draw() {
   const rimA      = dark ? 'rgba(200,188,255,' : 'rgba(60,52,160,';
   const edgeColor = dark ? 'rgba(200,188,255,0.45)' : 'rgba(60,52,160,0.35)';
   const gridA     = dark ? 'rgba(200,188,255,0.13)' : 'rgba(60,52,160,0.10)';
-  const obsStroke = dark ? '#ff9070' : '#993c1d';
-  const obsFill   = dark ? 'rgba(255,120,80,0.18)' : 'rgba(216,90,48,0.12)';
-
   const frontSlice = getSlice(0);
   const backSlice  = getSlice(1);
   const leftFront  = arcPoint(frontSlice.cx, frontSlice.cy, frontSlice.r, -Math.PI/2);
@@ -147,8 +144,6 @@ function loop() {
     arcZs[i] -= Z_SPEED;
     if (arcZs[i] <= Z_NEAR) arcZs[i] += (Z_FAR - Z_NEAR);
   }
-
-  frameCount++;
 
   draw();
   requestAnimationFrame(loop);
