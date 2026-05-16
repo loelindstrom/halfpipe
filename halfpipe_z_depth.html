@@ -38,12 +38,16 @@ let Z_SPEED = 0.04 * 3;
 let playerAngle = 0;
 let headingAngle = 0;
 let slideSpeed = 0;
+let playerDepthT = 0;
 const TURN_SPEED = 0.080;
-const TURN_RETURN_SPEED = 0.060;
+const TURN_RETURN_SPEED = 0.080;
 const MAX_HEADING_ANGLE = Math.PI / 3;
 const SLIDE_ACCELERATION = 0.005;
-const SLIDE_FRICTION = 0.94;
+const SLIDE_FRICTION = 0.95;
 const EDGE_BOUNCE = 0.35;
+const MAX_PLAYER_DEPTH_T = 0.5;
+const PLAYER_DEPTH_EASING = 0.04;
+const DEPTH_SPEED_REFERENCE = 0.4;
 const PLAYER_HEIGHT = 30;
 const keys = {};
 
@@ -131,7 +135,9 @@ function draw() {
   ctx.strokeStyle = rimA + '0.9)'; ctx.lineWidth = 3; ctx.stroke();
 
   // Player
-  const pos = arcPoint(frontSlice.cx, frontSlice.cy, frontSlice.r, playerAngle);
+  const playerSlice = getSlice(playerDepthT);
+  const playerScale = 1 - playerDepthT * 0.6;
+  const pos = arcPoint(playerSlice.cx, playerSlice.cy, playerSlice.r, playerAngle);
   const nx = Math.cos(Math.PI / 2 + playerAngle);
   const ny = Math.sin(Math.PI / 2 + playerAngle);
   const tx = -Math.cos(playerAngle);
@@ -140,9 +146,9 @@ function draw() {
   const leanY = -ny * Math.cos(headingAngle) + ty * Math.sin(headingAngle);
   const playerColor = dark ? '#e8e0ff' : '#3c34a0';
   ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
-  ctx.lineTo(pos.x + leanX * PLAYER_HEIGHT, pos.y + leanY * PLAYER_HEIGHT);
-  ctx.strokeStyle = playerColor; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.stroke();
-  ctx.beginPath(); ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
+  ctx.lineTo(pos.x + leanX * PLAYER_HEIGHT * playerScale, pos.y + leanY * PLAYER_HEIGHT * playerScale);
+  ctx.strokeStyle = playerColor; ctx.lineWidth = 3.5 * playerScale; ctx.lineCap = 'round'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(pos.x, pos.y, 6 * playerScale, 0, Math.PI * 2);
   ctx.fillStyle = playerColor; ctx.fill();
 }
 
@@ -161,6 +167,11 @@ function loop() {
   slideSpeed += Math.sin(headingAngle) * SLIDE_ACCELERATION;
   slideSpeed *= SLIDE_FRICTION;
   playerAngle += slideSpeed;
+
+  const turnAmount = Math.abs(headingAngle) / MAX_HEADING_ANGLE;
+  const speedAmount = Math.min(1, Math.abs(slideSpeed) / DEPTH_SPEED_REFERENCE);
+  const targetDepthT = MAX_PLAYER_DEPTH_T * Math.min(1, turnAmount * 0.7 + speedAmount * 0.3);
+  playerDepthT += (targetDepthT - playerDepthT) * PLAYER_DEPTH_EASING;
 
   if (playerAngle > Math.PI / 2) {
     playerAngle = Math.PI / 2;
