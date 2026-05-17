@@ -565,12 +565,21 @@ function getScoreTier(score = avoidedStreak) {
 }
 
 function getScoreColor(score = avoidedStreak) {
+  if (score >= 700) return '#f4f7ff';
   const tier = getScoreTier(score);
   if (tier <= 0) return '#c8bcff';
   return SCORE_COLORS[Math.min(tier, SCORE_COLORS.length) - 1];
 }
 
 function getGridPalette() {
+  if (avoidedStreak >= 700) {
+    return {
+      rimA: 'rgba(244,247,255,',
+      edgeColor: 'rgba(244,247,255,0.65)',
+      gridColor: 'rgba(244,247,255,0.26)'
+    };
+  }
+
   const scoreColor = getScoreColor();
   if (getScoreTier() === 0) {
     return {
@@ -605,19 +614,24 @@ function hexToRgb(hex) {
   };
 }
 
-function drawRainbowBanner() {
+function drawRainbowBanner(endpointY) {
   if (avoidedStreak < 700) return;
 
-  const baseY = H * 0.35;
-  const radius = W * 0.26;
+  const startAngle = Math.PI * 1.08;
+  const endAngle = Math.PI * 1.92;
+  const radius = W * 0.18;
+  const gap = 9;
+  const lineWidth = 6;
   const colors = SCORE_COLORS;
   ctx.save();
   ctx.lineCap = 'round';
   for (let i = 0; i < colors.length; i++) {
+    const r = radius - i * gap;
+    const cy = endpointY - Math.sin(startAngle) * r;
     ctx.beginPath();
-    ctx.arc(CX, baseY + i * 6, radius - i * 10, Math.PI * 1.05, Math.PI * 1.95);
+    ctx.arc(CX, cy, r, startAngle, endAngle);
     ctx.strokeStyle = colors[i];
-    ctx.lineWidth = 8;
+    ctx.lineWidth = lineWidth;
     ctx.globalAlpha = 0.62;
     ctx.stroke();
   }
@@ -690,9 +704,9 @@ function draw() {
   ctx.clearRect(0, 0, W, H);
 
   const palette = getGridPalette();
-  const rimA      = isRecordRun ? 'rgba(94,203,119,' : palette.rimA;
-  const edgeColor = isRecordRun ? 'rgba(94,203,119,0.55)' : palette.edgeColor;
-  const gridA     = isRecordRun ? 'rgba(94,203,119,0.25)' : palette.gridColor;
+  const rimA      = palette.rimA;
+  const edgeColor = palette.edgeColor;
+  const gridA     = palette.gridColor;
   const obstacleFill = '#b84a24';
   const obstacleStroke = '#6e260f';
   const hitHalo = 'rgba(210,0,0,0.65)';
@@ -703,7 +717,7 @@ function draw() {
   const leftBack   = arcPoint(backSlice.cx,  backSlice.cy,  backSlice.r,  -Math.PI/2);
   const rightBack  = arcPoint(backSlice.cx,  backSlice.cy,  backSlice.r,   Math.PI/2);
 
-  drawRainbowBanner();
+  drawRainbowBanner((leftFront.y + rightFront.y) / 2);
 
   ctx.beginPath(); ctx.moveTo(leftFront.x, leftFront.y); ctx.lineTo(leftBack.x, leftBack.y);
   ctx.strokeStyle = edgeColor; ctx.lineWidth = 1.5; ctx.stroke();
