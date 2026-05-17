@@ -13,7 +13,7 @@
   }
   #score, #highScore { transition: color 120ms ease; }
   #score.is-record, #highScore.is-record { color: #5ecb77; text-shadow: 0 0 10px rgba(94,203,119,0.5); }
-  canvas { display: block; width: 100%; height: auto; touch-action: none; }
+  canvas { display: block; width: 100%; max-height: calc(100dvh - 130px); height: auto; aspect-ratio: 860 / 540; touch-action: none; }
   #hint { font-size: 13px; color: #aaa; }
   #touchControls { display: none; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
   .steerButton {
@@ -120,6 +120,17 @@
     #wrap { width: min(900px, calc(100vw - 16px)); padding: 4.5rem 0 1rem; gap: 0.75rem; }
     #hud { font-size: 17px; }
     #touchControls { display: grid; }
+    #hint { display: none; }
+  }
+  @media (orientation: landscape) and (max-height: 520px) {
+    #wrap {
+      width: min(calc((100dvh - 58px) * 1.592), calc(100vw - 24px));
+      padding: 0.5rem 0;
+      gap: 0.35rem;
+    }
+    #hud { font-size: 14px; }
+    canvas { max-height: calc(100dvh - 58px); }
+    #touchControls { display: none; }
     #hint { display: none; }
   }
   canvas { border: 1px solid #333; border-radius: 8px; background: #000; }
@@ -882,19 +893,59 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('keyup', e => { keys[e.key] = false; });
 
+const activeSteerPointers = new Map();
+
+function setSteerKey(key, pressed) {
+  keys[key] = pressed;
+}
+
+function syncSteerKeysFromPointers() {
+  setSteerKey('ArrowLeft', false);
+  setSteerKey('ArrowRight', false);
+  for (const key of activeSteerPointers.values()) {
+    setSteerKey(key, true);
+  }
+}
+
+function releaseSteerPointer(pointerId) {
+  activeSteerPointers.delete(pointerId);
+  syncSteerKeysFromPointers();
+}
+
 for (const button of steerButtons) {
   const key = button.dataset.key;
-  const setPressed = pressed => { keys[key] = pressed; };
 
   button.addEventListener('pointerdown', e => {
     e.preventDefault();
     button.setPointerCapture(e.pointerId);
-    setPressed(true);
+    activeSteerPointers.set(e.pointerId, key);
+    syncSteerKeysFromPointers();
   });
-  button.addEventListener('pointerup', () => setPressed(false));
-  button.addEventListener('pointercancel', () => setPressed(false));
-  button.addEventListener('lostpointercapture', () => setPressed(false));
 }
+
+canvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const key = e.clientX - rect.left < rect.width / 2 ? 'ArrowLeft' : 'ArrowRight';
+  canvas.setPointerCapture(e.pointerId);
+  activeSteerPointers.set(e.pointerId, key);
+  syncSteerKeysFromPointers();
+});
+canvas.addEventListener('pointermove', e => {
+  if (!activeSteerPointers.has(e.pointerId)) return;
+  const rect = canvas.getBoundingClientRect();
+  const key = e.clientX - rect.left < rect.width / 2 ? 'ArrowLeft' : 'ArrowRight';
+  activeSteerPointers.set(e.pointerId, key);
+  syncSteerKeysFromPointers();
+});
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+window.addEventListener('pointerup', e => releaseSteerPointer(e.pointerId));
+window.addEventListener('pointercancel', e => releaseSteerPointer(e.pointerId));
+window.addEventListener('blur', () => {
+  activeSteerPointers.clear();
+  syncSteerKeysFromPointers();
+});
 
 updateHud();
 loop();
