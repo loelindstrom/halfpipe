@@ -2,7 +2,7 @@
 <style>
   body { margin: 0; background: #111; color: #eee; }
   body.day { background: #fff; color: #111; }
-  #wrap { display: flex; flex-direction: column; align-items: center; width: min(560px, calc(100vw - 24px)); margin: 0 auto; padding: 2rem 0; font-family: var(--font-sans); gap: 1rem; }
+  #wrap { display: flex; flex-direction: column; align-items: center; width: min(900px, calc(100vw - 24px)); margin: 0 auto; padding: 1rem 0; font-family: var(--font-sans); gap: 1rem; }
   #hud {
     display: flex;
     justify-content: space-between;
@@ -52,7 +52,7 @@
     top: 0;
     left: 0;
     bottom: 0;
-    width: min(360px, calc(100vw - 32px));
+    width: min(420px, calc(100vw - 32px));
     box-sizing: border-box;
     padding: 54px 16px 16px;
     overflow: auto;
@@ -66,13 +66,39 @@
   }
   #drawer.open { transform: translateX(0); }
   #drawer h2 { margin: 0 0 14px; font-size: 16px; }
-  #drawer h3 { margin: 18px 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: #aaa; }
+  #drawer details { border-top: 1px solid #333; padding: 8px 0; }
+  #drawer details:first-child { border-top: 0; }
+  #drawer summary { cursor: pointer; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #aaa; }
   .control { display: grid; gap: 6px; margin-bottom: 12px; }
-  .control label { display: flex; justify-content: space-between; gap: 12px; color: #eee; }
+  .control label { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #eee; }
+  .controlName { display: inline-flex; align-items: center; gap: 6px; }
+  .infoButton {
+    display: inline-grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border: 1px solid #666;
+    border-radius: 50%;
+    background: transparent;
+    color: inherit;
+    font: 700 12px system-ui, sans-serif;
+    padding: 0;
+    cursor: pointer;
+  }
+  .infoText {
+    display: none;
+    border: 1px solid #444;
+    border-radius: 6px;
+    background: #181818;
+    color: #ddd;
+    padding: 8px;
+    line-height: 1.35;
+  }
+  .control.showInfo .infoText { display: block; }
   .control output { color: #aaa; font-variant-numeric: tabular-nums; }
   .control input { width: 100%; }
-  #printSettings {
-    width: 100%;
+  #settingsActions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  #applySettings, #resetSettings {
     margin-top: 10px;
     border: 1px solid #999;
     background: #eee;
@@ -82,10 +108,12 @@
     font: 13px system-ui, sans-serif;
     cursor: pointer;
   }
+  #resetSettings { background: transparent; color: #eee; border-color: #555; }
+  #settingsError { min-height: 18px; margin-top: 8px; color: #ff8a8a; font-size: 12px; line-height: 1.35; }
   #settingsOutput {
     box-sizing: border-box;
     width: 100%;
-    min-height: 180px;
+    min-height: 260px;
     margin-top: 10px;
     resize: vertical;
     border: 1px solid #444;
@@ -97,25 +125,34 @@
   }
 
   body.day #drawer { background: rgba(255,255,255,0.96); border-right-color: #ddd; box-shadow: 0 10px 30px rgba(0,0,0,0.18); }
-  body.day #drawer h3 { color: #666; }
+  body.day #drawer details { border-top-color: #ddd; }
+  body.day #drawer summary { color: #666; }
   body.day .control label { color: #222; }
+  body.day .infoButton { border-color: #aaa; }
+  body.day .infoText { background: #f7f7f7; color: #333; border-color: #ddd; }
   body.day .control output { color: #666; }
-  body.day #printSettings { background: #222; color: #fff; border-color: #999; }
+  body.day #applySettings { background: #222; color: #fff; border-color: #999; }
+  body.day #resetSettings { color: #222; border-color: #bbb; }
   body.day #settingsOutput { background: #fff; color: #111; border-color: #bbb; }
 
   @media (max-width: 680px) {
-    #wrap { width: min(560px, calc(100vw - 16px)); padding: 4.5rem 0 1rem; gap: 0.75rem; }
+    #wrap { width: min(900px, calc(100vw - 16px)); padding: 4.5rem 0 1rem; gap: 0.75rem; }
     #hud { font-size: 17px; }
     #touchControls { display: grid; }
     #hint { display: none; }
   }
+  canvas { border: 1px solid #333; border-radius: 8px; background: #000; }
 </style>
 <button id="drawerToggle">Tuning</button>
 <button id="themeToggle">Night mode</button>
 <aside id="drawer" aria-label="Game tuning">
   <div id="settingsControls"></div>
-  <button id="printSettings">Console print</button>
-  <textarea id="settingsOutput" readonly aria-label="Printed settings"></textarea>
+  <textarea id="settingsOutput" aria-label="Settings JSON"></textarea>
+  <div id="settingsActions">
+    <button id="applySettings">Apply</button>
+    <button id="resetSettings">Reset to default</button>
+  </div>
+  <div id="settingsError" role="status" aria-live="polite"></div>
 </aside>
 <div id="wrap">
   <div id="hud">
@@ -138,15 +175,27 @@ const drawer = document.getElementById('drawer');
 const drawerToggle = document.getElementById('drawerToggle');
 const themeToggle = document.getElementById('themeToggle');
 const settingsControls = document.getElementById('settingsControls');
-const printSettings = document.getElementById('printSettings');
 const settingsOutput = document.getElementById('settingsOutput');
+const applySettings = document.getElementById('applySettings');
+const resetSettings = document.getElementById('resetSettings');
+const settingsError = document.getElementById('settingsError');
 const steerButtons = document.querySelectorAll('.steerButton');
+const VIEW = {
+  canvasWidth: 860,
+  canvasHeight: 540,
+  frontRadiusRatio: 0.40,
+  frontBottomPadding: 12,
+  vanishingYRatio: 0.32,
+  wallLines: 8,
+  sliceRadiusShrink: 0.94
+};
+canvas.width = VIEW.canvasWidth;
+canvas.height = VIEW.canvasHeight;
 const W = canvas.width, H = canvas.height;
 const CX = W / 2;
-const FRONT_R = 160;
-const FRONT_CY = H - FRONT_R - 10;
-const VP_Y = H * 0.52;
-const NUM_WALL_LINES = 8;
+const FRONT_R = W * VIEW.frontRadiusRatio;
+const FRONT_CY = H - FRONT_R - VIEW.frontBottomPadding;
+const VP_Y = H * VIEW.vanishingYRatio;
 
 // Z depth: objects move linearly in Z from Z_FAR toward Z_NEAR
 // Perspective projection: screenScale = FOCAL / Z
@@ -161,64 +210,103 @@ let slideSpeed = 0;
 let playerDepthT = 0;
 const keys = {};
 
-const settings = {
-  numSlices: 15,
-  zSpeed: 0.12,
-
-  turnSpeed: 0.080,
-  turnReturnSpeed: 0.080,
-  maxHeadingAngle: Math.PI / 3,
-  slideAcceleration: 0.005,
-  slideFriction: 0.95,
-  edgeBounce: 0.35,
-  maxPlayerDepthT: 0.5,
-  playerDepthEasing: 0.04,
-  depthSpeedReference: 0.4,
-  playerHeight: 30,
-  playerDotRadius: 6,
-
-  obstacleRadius: 6,
-  obstaclePositionSpread: Math.PI * 0.44,
-  obstacleFrequency: 30,
-  obstacleIntervalJitter: 0.45,
-  minObstacleSpacingZ: 0.002,
-  collisionDepthWindow: 0.045,
-  hitHaloRadiusMultiplier: 4.2,
-  hitHaloLineWidth: 4,
-  hitLingerMs: 1500
+// Paste JSON from the tuning drawer here to change the starting defaults.
+const DEFAULT_SETTINGS = {
+  "tunnel": {
+    "numSlices": 15,
+    "zSpeed": 0.095
+  },
+  "steering": {
+    "turnSpeed": 0.171,
+    "turnReturnSpeed": 0.166,
+    "maxHeadingAngle": 1.29179938779915,
+    "slideAcceleration": 0.0053,
+    "slideFriction": 0.884,
+    "edgeBounce": 0.35
+  },
+  "depth": {
+    "maxPlayerDepthT": 0.5,
+    "playerDepthEasing": 0.04,
+    "depthSpeedReference": 0.4
+  },
+  "player": {
+    "playerHeight": 39,
+    "playerDotRadius": 10.5
+  },
+  "obstacles": {
+    "obstacleRadius": 21,
+    "obstaclePositionSpread": 1.56179938779915,
+    "obstacleFrequency": 120,
+    "obstacleIntervalJitter": 1,
+    "minObstacleSpacingZ": 0.002,
+    "collisionDepthWindow": 0.045
+  },
+  "hitEffects": {
+    "hitHaloRadiusMultiplier": 2.5,
+    "hitHaloLineWidth": 2.5,
+    "hitLingerMs": 550
+  }
 };
+
+let settings = cloneSettings(DEFAULT_SETTINGS);
 
 const sliderSections = [
   {
-    title: 'Player Turning Experience',
+    key: 'tunnel',
+    title: 'Tunnel Flow',
     controls: [
-      ['turnSpeed', 'Turn speed', 0, 0.2, 0.001],
-      ['turnReturnSpeed', 'Turn return speed', 0, 0.2, 0.001],
-      ['maxHeadingAngle', 'Max heading angle', Math.PI / 12, Math.PI / 2, 0.01, 'deg'],
-      ['slideAcceleration', 'Slide acceleration', 0, 0.02, 0.0001],
-      ['slideFriction', 'Slide friction', 0.85, 0.995, 0.001],
-      ['edgeBounce', 'Edge bounce', 0, 1, 0.01],
-      ['maxPlayerDepthT', 'Max player depth', 0, 0.8, 0.01],
-      ['playerDepthEasing', 'Depth easing', 0, 0.2, 0.001],
-      ['depthSpeedReference', 'Depth speed reference', 0.02, 0.8, 0.005],
-      ['playerHeight', 'Player height', 8, 70, 1],
-      ['playerDotRadius', 'Player dot radius', 2, 16, 0.5]
+      ['numSlices', 'Tunnel slices', 4, 40, 1, 'int', 'How many moving pipe rings are visible. More rings make the tunnel feel denser.'],
+      ['zSpeed', 'Tunnel speed', 0.01, 0.5, 0.005, null, 'How fast rings and obstacles move toward the player.']
     ]
   },
   {
-    title: 'Speed & Difficulty',
+    key: 'steering',
+    title: 'Steering',
     controls: [
-      ['zSpeed', 'Tunnel speed', 0.01, 0.5, 0.005],
-      ['numSlices', 'Tunnel slices', 4, 40, 1, 'int'],
-      ['obstacleRadius', 'Obstacle radius', 2, 24, 0.5],
-      ['obstaclePositionSpread', 'Obstacle position spread', Math.PI / 12, Math.PI / 2, 0.01, 'deg'],
-      ['obstacleFrequency', 'Obstacle frequency', 1, 120, 1],
-      ['obstacleIntervalJitter', 'Interval jitter', 0, 1, 0.01],
-      ['minObstacleSpacingZ', 'Minimum spacing Z', 0.001, 8, 0.001],
-      ['collisionDepthWindow', 'Collision depth window', 0.005, 0.25, 0.001],
-      ['hitHaloRadiusMultiplier', 'Hit halo size', 1, 8, 0.1],
-      ['hitHaloLineWidth', 'Hit halo line width', 1, 12, 0.5],
-      ['hitLingerMs', 'Hit linger ms', 0, 3000, 50]
+      ['turnSpeed', 'Turn speed', 0, 0.2, 0.001, null, 'How quickly holding left or right rotates the player direction.'],
+      ['turnReturnSpeed', 'Turn return speed', 0, 0.2, 0.001, null, 'How quickly the player direction recenters after releasing steering.'],
+      ['maxHeadingAngle', 'Max heading angle', Math.PI / 12, Math.PI / 2, 0.01, 'deg', 'The largest angle the player can point away from straight down the pipe.'],
+      ['slideAcceleration', 'Slide acceleration', 0, 0.02, 0.0001, null, 'How strongly the pointed direction turns into sideways movement.'],
+      ['slideFriction', 'Slide friction', 0.85, 0.995, 0.001, null, 'How much sideways speed is preserved each frame. Higher values feel more slippery.'],
+      ['edgeBounce', 'Edge bounce', 0, 1, 0.01, null, 'How much speed is reflected when hitting the pipe edge.']
+    ]
+  },
+  {
+    key: 'depth',
+    title: 'Carving Depth',
+    controls: [
+      ['maxPlayerDepthT', 'Max player depth', 0, 0.8, 0.01, null, 'How far into the tunnel the player can visually drift while carving.'],
+      ['playerDepthEasing', 'Depth easing', 0, 0.2, 0.001, null, 'How quickly the player eases toward the target visual depth.'],
+      ['depthSpeedReference', 'Depth speed reference', 0.02, 0.8, 0.005, null, 'The slide speed needed before depth movement reaches full effect.']
+    ]
+  },
+  {
+    key: 'player',
+    title: 'Player Shape',
+    controls: [
+      ['playerHeight', 'Player height', 8, 70, 1, null, 'Length of the player marker from base circle to direction tip.'],
+      ['playerDotRadius', 'Player dot radius', 2, 16, 0.5, null, 'Radius of the player base circle used for drawing and collision.']
+    ]
+  },
+  {
+    key: 'obstacles',
+    title: 'Obstacles',
+    controls: [
+      ['obstacleRadius', 'Obstacle radius', 2, 24, 0.5, null, 'Obstacle size at the front of the pipe.'],
+      ['obstaclePositionSpread', 'Obstacle position spread', Math.PI / 12, Math.PI / 2, 0.01, 'deg', 'How much of the halfpipe width random obstacles can occupy.'],
+      ['obstacleFrequency', 'Obstacle frequency', 1, 120, 1, null, 'Roughly how many obstacles exist across one full tunnel length.'],
+      ['obstacleIntervalJitter', 'Interval jitter', 0, 1, 0.01, null, 'Random variation in spacing between obstacle spawns.'],
+      ['minObstacleSpacingZ', 'Minimum spacing Z', 0.001, 8, 0.001, null, 'Smallest allowed distance between obstacle spawns in Z space.'],
+      ['collisionDepthWindow', 'Collision depth window', 0.005, 0.25, 0.001, null, 'How close player and obstacle depth must be before circle collision counts.']
+    ]
+  },
+  {
+    key: 'hitEffects',
+    title: 'Hit Effects',
+    controls: [
+      ['hitHaloRadiusMultiplier', 'Hit halo size', 1, 8, 0.1, null, 'How much larger the red hit circle is than the obstacle.'],
+      ['hitHaloLineWidth', 'Hit halo line width', 1, 12, 0.5, null, 'Thickness of the red hit circle stroke.'],
+      ['hitLingerMs', 'Hit linger ms', 0, 3000, 50, null, 'How long a hit obstacle waits on the front arc before disappearing.']
     ]
   }
 ];
@@ -227,8 +315,8 @@ const sliderSections = [
 const arcZs = [];
 function initArcs() {
   arcZs.length = 0;
-  for (let i = 0; i < settings.numSlices; i++) {
-    arcZs.push(Z_NEAR + (Z_FAR - Z_NEAR) * (i / settings.numSlices));
+  for (let i = 0; i < settings.tunnel.numSlices; i++) {
+    arcZs.push(Z_NEAR + (Z_FAR - Z_NEAR) * (i / settings.tunnel.numSlices));
   }
 }
 const obstacles = [];
@@ -241,13 +329,13 @@ let isRecordRun = false;
 initArcs();
 
 function randomObstacleAngle() {
-  return (Math.random() * 2 - 1) * settings.obstaclePositionSpread;
+  return (Math.random() * 2 - 1) * settings.obstacles.obstaclePositionSpread;
 }
 
 function nextObstacleSpacing() {
-  const baseSpacing = (Z_FAR - Z_NEAR) / Math.max(1, settings.obstacleFrequency);
-  const jitter = baseSpacing * settings.obstacleIntervalJitter;
-  return Math.max(settings.minObstacleSpacingZ, baseSpacing + (Math.random() * 2 - 1) * jitter);
+  const baseSpacing = (Z_FAR - Z_NEAR) / Math.max(1, settings.obstacles.obstacleFrequency);
+  const jitter = baseSpacing * settings.obstacles.obstacleIntervalJitter;
+  return Math.max(settings.obstacles.minObstacleSpacingZ, baseSpacing + (Math.random() * 2 - 1) * jitter);
 }
 
 function spawnObstacle() {
@@ -274,6 +362,30 @@ function isDark() {
   return !document.body.classList.contains('day');
 }
 
+function cloneSettings(source) {
+  return JSON.parse(JSON.stringify(source));
+}
+
+function getSetting(group, key) {
+  return settings[group][key];
+}
+
+function setSetting(group, key, value) {
+  settings[group][key] = value;
+}
+
+function settingsToJson() {
+  return JSON.stringify(settings, null, 2);
+}
+
+function syncSettingsOutput() {
+  settingsOutput.value = settingsToJson();
+}
+
+function setSettingsError(message = '') {
+  settingsError.textContent = message;
+}
+
 function formatSettingValue(value, kind) {
   if (kind === 'deg') return `${Math.round(value * 180 / Math.PI)} deg`;
   if (kind === 'int') return `${Math.round(value)}`;
@@ -283,42 +395,98 @@ function formatSettingValue(value, kind) {
 }
 
 function buildSettingsDrawer() {
+  settingsControls.textContent = '';
   for (const section of sliderSections) {
-    const heading = document.createElement('h3');
-    heading.textContent = section.title;
-    settingsControls.appendChild(heading);
+    const details = document.createElement('details');
+    const summary = document.createElement('summary');
+    summary.textContent = section.title;
+    details.open = section.key === 'tunnel' || section.key === 'steering';
+    details.appendChild(summary);
+    settingsControls.appendChild(details);
 
-    for (const [key, labelText, min, max, step, kind] of section.controls) {
+    for (const [key, labelText, min, max, step, kind, description] of section.controls) {
       const row = document.createElement('div');
       const label = document.createElement('label');
       const labelSpan = document.createElement('span');
+      const nameSpan = document.createElement('span');
+      const infoButton = document.createElement('button');
+      const infoText = document.createElement('div');
       const output = document.createElement('output');
       const input = document.createElement('input');
 
       row.className = 'control';
+      nameSpan.className = 'controlName';
       labelSpan.textContent = labelText;
-      output.value = formatSettingValue(settings[key], kind);
+      infoButton.className = 'infoButton';
+      infoButton.type = 'button';
+      infoButton.textContent = 'i';
+      infoButton.setAttribute('aria-label', `${labelText} info`);
+      infoText.className = 'infoText';
+      infoText.textContent = description;
+      output.value = formatSettingValue(getSetting(section.key, key), kind);
       input.type = 'range';
       input.min = min;
       input.max = max;
       input.step = step;
-      input.value = settings[key];
+      input.value = getSetting(section.key, key);
 
       input.addEventListener('input', () => {
         const value = kind === 'int' ? Math.round(Number(input.value)) : Number(input.value);
-        settings[key] = value;
+        setSetting(section.key, key, value);
         output.value = formatSettingValue(value, kind);
-        if (key === 'numSlices') initArcs();
+        if (section.key === 'tunnel' && key === 'numSlices') initArcs();
+        syncSettingsOutput();
+        setSettingsError();
       });
 
-      label.append(labelSpan, output);
-      row.append(label, input);
-      settingsControls.appendChild(row);
+      infoButton.addEventListener('click', () => {
+        row.classList.toggle('showInfo');
+      });
+
+      nameSpan.append(labelSpan, infoButton);
+      label.append(nameSpan, output);
+      row.append(label, input, infoText);
+      details.appendChild(row);
     }
   }
 }
 
+function refreshSliderControls() {
+  settingsControls.textContent = '';
+  buildSettingsDrawer();
+}
+
+function validateSettingsShape(candidate) {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return 'Settings must be a JSON object.';
+  }
+
+  for (const section of sliderSections) {
+    const group = candidate[section.key];
+    if (!group || typeof group !== 'object' || Array.isArray(group)) {
+      return `Missing settings group "${section.key}".`;
+    }
+
+    for (const [key] of section.controls) {
+      if (typeof group[key] !== 'number' || !Number.isFinite(group[key])) {
+        return `Missing or invalid number at "${section.key}.${key}".`;
+      }
+    }
+  }
+
+  return '';
+}
+
+function applySettingsObject(nextSettings) {
+  settings = cloneSettings(nextSettings);
+  initArcs();
+  nextObstacleInZ = nextObstacleSpacing();
+  refreshSliderControls();
+  syncSettingsOutput();
+}
+
 buildSettingsDrawer();
+syncSettingsOutput();
 
 drawerToggle.addEventListener('click', () => {
   drawer.classList.toggle('open');
@@ -328,10 +496,24 @@ themeToggle.addEventListener('click', () => {
   document.body.classList.toggle('day');
 });
 
-printSettings.addEventListener('click', () => {
-  const settingsJson = JSON.stringify(settings, null, 2);
-  console.log(settingsJson);
-  settingsOutput.value = settingsJson;
+applySettings.addEventListener('click', () => {
+  try {
+    const parsed = JSON.parse(settingsOutput.value);
+    const error = validateSettingsShape(parsed);
+    if (error) {
+      setSettingsError(error);
+      return;
+    }
+    applySettingsObject(parsed);
+    setSettingsError('Applied.');
+  } catch (error) {
+    setSettingsError(`Invalid JSON: ${error.message}`);
+  }
+});
+
+resetSettings.addEventListener('click', () => {
+  applySettingsObject(DEFAULT_SETTINGS);
+  setSettingsError('Reset to defaults.');
 });
 
 // Project a Z depth value to a screen t in [0,1]
@@ -347,7 +529,7 @@ function zToT(z) {
 
 function getSlice(t) {
   const cy = FRONT_CY + (VP_Y - FRONT_CY) * t;
-  const r  = FRONT_R  * (1 - t * 0.94);
+  const r  = FRONT_R  * (1 - t * VIEW.sliceRadiusShrink);
   return { cx: CX, cy, r };
 }
 
@@ -365,7 +547,7 @@ function getObstacleCircle(obstacle) {
   return {
     x: pos.x,
     y: pos.y,
-    r: settings.obstacleRadius * (s.r / FRONT_R),
+    r: settings.obstacles.obstacleRadius * (s.r / FRONT_R),
     t
   };
 }
@@ -377,7 +559,7 @@ function getPlayerCircle() {
   return {
     x: pos.x,
     y: pos.y,
-    r: settings.playerDotRadius * playerScale,
+    r: settings.player.playerDotRadius * playerScale,
     scale: playerScale
   };
 }
@@ -394,11 +576,11 @@ function draw() {
   ctx.clearRect(0, 0, W, H);
 
   const rimA      = isRecordRun ? 'rgba(94,203,119,' : (dark ? 'rgba(200,188,255,' : 'rgba(60,52,160,');
-  const edgeColor = isRecordRun ? 'rgba(94,203,119,0.55)' : (dark ? 'rgba(200,188,255,0.45)' : 'rgba(60,52,160,0.35)');
-  const gridA     = isRecordRun ? 'rgba(94,203,119,0.18)' : (dark ? 'rgba(200,188,255,0.13)' : 'rgba(60,52,160,0.10)');
-  const obstacleFill = dark ? '#ff9b74' : '#b84a24';
-  const obstacleStroke = dark ? '#ffd0bf' : '#6e260f';
-  const hitHalo = dark ? 'rgba(255,68,68,0.7)' : 'rgba(210,0,0,0.65)';
+  const edgeColor = isRecordRun ? 'rgba(94,203,119,0.55)' : (dark ? 'rgba(200,188,255,0.55)' : 'rgba(60,52,160,0.55)');
+  const gridA     = isRecordRun ? 'rgba(94,203,119,0.25)' : (dark ? 'rgba(200,188,255,0.25)' : 'rgba(60,52,160,0.25)');
+  const obstacleFill = dark ? '#b84a24' : '#b84a24';
+  const obstacleStroke = dark ? '#6e260f' : '#6e260f';
+  const hitHalo = dark ? 'rgba(210,0,0,0.65)' : 'rgba(210,0,0,0.65)';
   const frontSlice = getSlice(0);
   const backSlice  = getSlice(1);
   const leftFront  = arcPoint(frontSlice.cx, frontSlice.cy, frontSlice.r, -Math.PI/2);
@@ -411,8 +593,8 @@ function draw() {
   ctx.beginPath(); ctx.moveTo(rightFront.x, rightFront.y); ctx.lineTo(rightBack.x, rightBack.y);
   ctx.strokeStyle = edgeColor; ctx.lineWidth = 1.5; ctx.stroke();
 
-  for (let li = 1; li < NUM_WALL_LINES; li++) {
-    const a = -Math.PI/2 + (Math.PI / NUM_WALL_LINES) * li;
+  for (let li = 1; li < VIEW.wallLines; li++) {
+    const a = -Math.PI/2 + (Math.PI / VIEW.wallLines) * li;
     const pFront = arcPoint(frontSlice.cx, frontSlice.cy, frontSlice.r, a);
     const pBack  = arcPoint(backSlice.cx,  backSlice.cy,  backSlice.r,  a);
     ctx.beginPath(); ctx.moveTo(pFront.x, pFront.y); ctx.lineTo(pBack.x, pBack.y);
@@ -446,9 +628,9 @@ function draw() {
 
     if (obstacle.hit) {
       ctx.beginPath();
-      ctx.arc(obstacleCircle.x, obstacleCircle.y, obstacleCircle.r * settings.hitHaloRadiusMultiplier, 0, Math.PI * 2);
+      ctx.arc(obstacleCircle.x, obstacleCircle.y, obstacleCircle.r * settings.hitEffects.hitHaloRadiusMultiplier, 0, Math.PI * 2);
       ctx.strokeStyle = hitHalo;
-      ctx.lineWidth = settings.hitHaloLineWidth;
+      ctx.lineWidth = settings.hitEffects.hitHaloLineWidth;
       ctx.stroke();
     }
 
@@ -471,7 +653,7 @@ function draw() {
   const leanY = -ny * Math.cos(headingAngle) + ty * Math.sin(headingAngle);
   const playerColor = dark ? '#e8e0ff' : '#3c34a0';
   ctx.beginPath(); ctx.moveTo(playerCircle.x, playerCircle.y);
-  ctx.lineTo(playerCircle.x + leanX * settings.playerHeight * playerCircle.scale, playerCircle.y + leanY * settings.playerHeight * playerCircle.scale);
+  ctx.lineTo(playerCircle.x + leanX * settings.player.playerHeight * playerCircle.scale, playerCircle.y + leanY * settings.player.playerHeight * playerCircle.scale);
   ctx.strokeStyle = playerColor; ctx.lineWidth = 3.5 * playerCircle.scale; ctx.lineCap = 'round'; ctx.stroke();
   ctx.beginPath(); ctx.arc(playerCircle.x, playerCircle.y, playerCircle.r, 0, Math.PI * 2);
   ctx.fillStyle = playerColor; ctx.fill();
@@ -483,44 +665,44 @@ function loop(now = performance.now()) {
   const frameScale = Math.min(2, Math.max(0, (now - lastFrameTime) / (1000 / 60)));
   lastFrameTime = now;
 
-  if (keys['ArrowLeft'])  headingAngle += settings.turnSpeed * frameScale;
-  if (keys['ArrowRight']) headingAngle -= settings.turnSpeed * frameScale;
+  if (keys['ArrowLeft'])  headingAngle += settings.steering.turnSpeed * frameScale;
+  if (keys['ArrowRight']) headingAngle -= settings.steering.turnSpeed * frameScale;
   if (!keys['ArrowLeft'] && !keys['ArrowRight']) {
-    const turnReturn = settings.turnReturnSpeed * frameScale;
+    const turnReturn = settings.steering.turnReturnSpeed * frameScale;
     if (Math.abs(headingAngle) <= turnReturn) {
       headingAngle = 0;
     } else {
       headingAngle -= Math.sign(headingAngle) * turnReturn;
     }
   }
-  headingAngle = Math.max(-settings.maxHeadingAngle, Math.min(settings.maxHeadingAngle, headingAngle));
+  headingAngle = Math.max(-settings.steering.maxHeadingAngle, Math.min(settings.steering.maxHeadingAngle, headingAngle));
 
-  slideSpeed += Math.sin(headingAngle) * settings.slideAcceleration * frameScale;
-  slideSpeed *= Math.pow(settings.slideFriction, frameScale);
+  slideSpeed += Math.sin(headingAngle) * settings.steering.slideAcceleration * frameScale;
+  slideSpeed *= Math.pow(settings.steering.slideFriction, frameScale);
   playerAngle += slideSpeed * frameScale;
 
-  const turnAmount = Math.abs(headingAngle) / settings.maxHeadingAngle;
-  const speedAmount = Math.min(1, Math.abs(slideSpeed) / settings.depthSpeedReference);
-  const targetDepthT = settings.maxPlayerDepthT * Math.min(1, turnAmount * 0.7 + speedAmount * 0.3);
-  const depthEasing = 1 - Math.pow(1 - settings.playerDepthEasing, frameScale);
+  const turnAmount = Math.abs(headingAngle) / settings.steering.maxHeadingAngle;
+  const speedAmount = Math.min(1, Math.abs(slideSpeed) / settings.depth.depthSpeedReference);
+  const targetDepthT = settings.depth.maxPlayerDepthT * Math.min(1, turnAmount * 0.7 + speedAmount * 0.3);
+  const depthEasing = 1 - Math.pow(1 - settings.depth.playerDepthEasing, frameScale);
   playerDepthT += (targetDepthT - playerDepthT) * depthEasing;
 
   if (playerAngle > Math.PI / 2) {
     playerAngle = Math.PI / 2;
-    slideSpeed *= -settings.edgeBounce;
+    slideSpeed *= -settings.steering.edgeBounce;
   }
   if (playerAngle < -Math.PI / 2) {
     playerAngle = -Math.PI / 2;
-    slideSpeed *= -settings.edgeBounce;
+    slideSpeed *= -settings.steering.edgeBounce;
   }
 
   // Move all arcs forward in Z (toward Z_NEAR), wrap back to Z_FAR when they pass front
   for (let i = 0; i < arcZs.length; i++) {
-    arcZs[i] -= settings.zSpeed * frameScale;
+    arcZs[i] -= settings.tunnel.zSpeed * frameScale;
     if (arcZs[i] <= Z_NEAR) arcZs[i] += (Z_FAR - Z_NEAR);
   }
 
-  nextObstacleInZ -= settings.zSpeed * frameScale;
+  nextObstacleInZ -= settings.tunnel.zSpeed * frameScale;
   while (nextObstacleInZ <= 0) {
     spawnObstacle();
     nextObstacleInZ += nextObstacleSpacing();
@@ -530,11 +712,11 @@ function loop(now = performance.now()) {
   for (let i = obstacles.length - 1; i >= 0; i--) {
     const obstacle = obstacles[i];
     if (obstacle.lingerUntil === null) {
-      obstacle.z -= settings.zSpeed * frameScale;
+      obstacle.z -= settings.tunnel.zSpeed * frameScale;
     }
 
     const obstacleCircle = getObstacleCircle(obstacle);
-    const isCloseInDepth = Math.abs(obstacleCircle.t - playerDepthT) <= settings.collisionDepthWindow;
+    const isCloseInDepth = Math.abs(obstacleCircle.t - playerDepthT) <= settings.obstacles.collisionDepthWindow;
     if (!obstacle.hit && isCloseInDepth && circlesOverlap(playerCircle, obstacleCircle)) {
       obstacle.hit = true;
       avoidedStreak = 0;
@@ -549,7 +731,7 @@ function loop(now = performance.now()) {
         obstacles.splice(i, 1);
       } else if (obstacle.lingerUntil === null) {
         obstacle.z = Z_NEAR;
-        obstacle.lingerUntil = performance.now() + settings.hitLingerMs;
+        obstacle.lingerUntil = performance.now() + settings.hitEffects.hitLingerMs;
       } else if (performance.now() >= obstacle.lingerUntil) {
         obstacles.splice(i, 1);
       }
