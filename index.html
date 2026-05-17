@@ -1,7 +1,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   body { margin: 0; background: #111; color: #eee; }
-  body.day { background: #fff; color: #111; }
   #wrap { display: flex; flex-direction: column; align-items: center; width: min(900px, calc(100vw - 24px)); margin: 0 auto; padding: 1rem 0; font-family: var(--font-sans); gap: 1rem; }
   #hud {
     display: flex;
@@ -12,13 +11,10 @@
     letter-spacing: 0.04em;
     text-transform: uppercase;
   }
-  body.day #hud { color: #333; }
   #score, #highScore { transition: color 120ms ease; }
   #score.is-record, #highScore.is-record { color: #5ecb77; text-shadow: 0 0 10px rgba(94,203,119,0.5); }
-  body.day #score.is-record, body.day #highScore.is-record { color: #188038; text-shadow: none; }
   canvas { display: block; width: 100%; height: auto; touch-action: none; }
   #hint { font-size: 13px; color: #aaa; }
-  body.day #hint { color: #555; }
   #touchControls { display: none; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
   .steerButton {
     min-height: 64px;
@@ -31,8 +27,7 @@
     touch-action: none;
     user-select: none;
   }
-  body.day .steerButton { background: #f7f7f7; color: #222; border-color: #bbb; }
-  #drawerToggle, #themeToggle {
+  #drawerToggle {
     position: fixed;
     top: 12px;
     z-index: 2;
@@ -45,8 +40,6 @@
     cursor: pointer;
   }
   #drawerToggle { left: 12px; }
-  #themeToggle { right: 12px; }
-  body.day #drawerToggle, body.day #themeToggle { background: #fff; color: #222; border-color: #bbb; }
   #drawer {
     position: fixed;
     top: 0;
@@ -123,18 +116,6 @@
     padding: 10px;
     font: 12px "Courier New", Consolas, monospace;
   }
-
-  body.day #drawer { background: rgba(255,255,255,0.96); border-right-color: #ddd; box-shadow: 0 10px 30px rgba(0,0,0,0.18); }
-  body.day #drawer details { border-top-color: #ddd; }
-  body.day #drawer summary { color: #666; }
-  body.day .control label { color: #222; }
-  body.day .infoButton { border-color: #aaa; }
-  body.day .infoText { background: #f7f7f7; color: #333; border-color: #ddd; }
-  body.day .control output { color: #666; }
-  body.day #applySettings { background: #222; color: #fff; border-color: #999; }
-  body.day #resetSettings { color: #222; border-color: #bbb; }
-  body.day #settingsOutput { background: #fff; color: #111; border-color: #bbb; }
-
   @media (max-width: 680px) {
     #wrap { width: min(900px, calc(100vw - 16px)); padding: 4.5rem 0 1rem; gap: 0.75rem; }
     #hud { font-size: 17px; }
@@ -144,7 +125,6 @@
   canvas { border: 1px solid #333; border-radius: 8px; background: #000; }
 </style>
 <button id="drawerToggle">Tuning</button>
-<button id="themeToggle">Night mode</button>
 <aside id="drawer" aria-label="Game tuning">
   <div id="settingsControls"></div>
   <textarea id="settingsOutput" aria-label="Settings JSON"></textarea>
@@ -173,7 +153,6 @@ const scoreEl = document.getElementById('score');
 const highScoreEl = document.getElementById('highScore');
 const drawer = document.getElementById('drawer');
 const drawerToggle = document.getElementById('drawerToggle');
-const themeToggle = document.getElementById('themeToggle');
 const settingsControls = document.getElementById('settingsControls');
 const settingsOutput = document.getElementById('settingsOutput');
 const applySettings = document.getElementById('applySettings');
@@ -325,6 +304,7 @@ let avoidedStreak = 0;
 let highScore = 0;
 let hasHitObstacle = false;
 let isRecordRun = false;
+let milestone = null;
 
 initArcs();
 
@@ -351,15 +331,18 @@ nextObstacleInZ = nextObstacleSpacing();
 function updateHud() {
   isRecordRun = avoidedStreak > highScore;
   if (isRecordRun) highScore = avoidedStreak;
+  if (avoidedStreak > 0 && avoidedStreak % 100 === 0) {
+    milestone = {
+      value: avoidedStreak,
+      startedAt: performance.now(),
+      color: getScoreColor(avoidedStreak)
+    };
+  }
 
   scoreEl.textContent = `Avoided: ${avoidedStreak}`;
   highScoreEl.textContent = `Highscore: ${highScore}`;
   scoreEl.classList.toggle('is-record', isRecordRun);
   highScoreEl.classList.toggle('is-record', isRecordRun || !hasHitObstacle);
-}
-
-function isDark() {
-  return !document.body.classList.contains('day');
 }
 
 function cloneSettings(source) {
@@ -492,10 +475,6 @@ drawerToggle.addEventListener('click', () => {
   drawer.classList.toggle('open');
 });
 
-themeToggle.addEventListener('click', () => {
-  document.body.classList.toggle('day');
-});
-
 applySettings.addEventListener('click', () => {
   try {
     const parsed = JSON.parse(settingsOutput.value);
@@ -571,22 +550,160 @@ function circlesOverlap(a, b) {
   return dx * dx + dy * dy <= minDistance * minDistance;
 }
 
+const SCORE_COLORS = [
+  '#ff4d4d',
+  '#ff9f1a',
+  '#ffe347',
+  '#5ecb77',
+  '#37c8ff',
+  '#7a7dff',
+  '#d46bff'
+];
+
+function getScoreTier(score = avoidedStreak) {
+  return Math.min(7, Math.floor(score / 100));
+}
+
+function getScoreColor(score = avoidedStreak) {
+  const tier = getScoreTier(score);
+  if (tier <= 0) return '#c8bcff';
+  return SCORE_COLORS[Math.min(tier, SCORE_COLORS.length) - 1];
+}
+
+function getGridPalette() {
+  const scoreColor = getScoreColor();
+  if (getScoreTier() === 0) {
+    return {
+      rimA: 'rgba(200,188,255,',
+      edgeColor: 'rgba(200,188,255,0.55)',
+      gridColor: 'rgba(200,188,255,0.25)'
+    };
+  }
+  return {
+    rimA: hexToRgbaPrefix(scoreColor),
+    edgeColor: hexToRgba(scoreColor, 0.58),
+    gridColor: hexToRgba(scoreColor, 0.28)
+  };
+}
+
+function hexToRgbaPrefix(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r},${g},${b},`;
+}
+
+function hexToRgba(hex, alpha) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function hexToRgb(hex) {
+  const value = parseInt(hex.slice(1), 16);
+  return {
+    r: (value >> 16) & 255,
+    g: (value >> 8) & 255,
+    b: value & 255
+  };
+}
+
+function drawRainbowBanner() {
+  if (avoidedStreak < 700) return;
+
+  const baseY = H * 0.35;
+  const radius = W * 0.26;
+  const colors = SCORE_COLORS;
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (let i = 0; i < colors.length; i++) {
+    ctx.beginPath();
+    ctx.arc(CX, baseY + i * 6, radius - i * 10, Math.PI * 1.05, Math.PI * 1.95);
+    ctx.strokeStyle = colors[i];
+    ctx.lineWidth = 8;
+    ctx.globalAlpha = 0.62;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawStar(x, y, size, alpha) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = '#fff9b0';
+  ctx.fillStyle = '#fff4a3';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const radius = i % 2 === 0 ? size : size * 0.32;
+    const angle = -Math.PI / 2 + i * Math.PI / 4;
+    const px = Math.cos(angle) * radius;
+    const py = Math.sin(angle) * radius;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawEndpointStars(leftPoint, rightPoint, now) {
+  if (avoidedStreak < 700) return;
+  const pulse = 0.55 + Math.sin(now / 130) * 0.35;
+  const size = 12 + Math.sin(now / 180) * 3;
+  drawStar(leftPoint.x, leftPoint.y, size, pulse);
+  drawStar(rightPoint.x, rightPoint.y, size, pulse);
+}
+
+function drawMilestone(now) {
+  if (!milestone) return;
+  const elapsed = now - milestone.startedAt;
+  if (elapsed > 1800) {
+    milestone = null;
+    return;
+  }
+  const visible = Math.floor(elapsed / 170) % 2 === 0;
+  if (!visible) return;
+
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 46px "Courier New", Consolas, monospace';
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+  ctx.fillStyle = milestone.value >= 700 ? createRainbowTextFill() : milestone.color;
+  const y = H * 0.2;
+  ctx.strokeText(`${milestone.value}`, CX, y);
+  ctx.fillText(`${milestone.value}`, CX, y);
+  ctx.restore();
+}
+
+function createRainbowTextFill() {
+  const gradient = ctx.createLinearGradient(CX - 90, 0, CX + 90, 0);
+  for (let i = 0; i < SCORE_COLORS.length; i++) {
+    gradient.addColorStop(i / (SCORE_COLORS.length - 1), SCORE_COLORS[i]);
+  }
+  return gradient;
+}
+
 function draw() {
-  const dark = isDark();
+  const now = performance.now();
   ctx.clearRect(0, 0, W, H);
 
-  const rimA      = isRecordRun ? 'rgba(94,203,119,' : (dark ? 'rgba(200,188,255,' : 'rgba(60,52,160,');
-  const edgeColor = isRecordRun ? 'rgba(94,203,119,0.55)' : (dark ? 'rgba(200,188,255,0.55)' : 'rgba(60,52,160,0.55)');
-  const gridA     = isRecordRun ? 'rgba(94,203,119,0.25)' : (dark ? 'rgba(200,188,255,0.25)' : 'rgba(60,52,160,0.25)');
-  const obstacleFill = dark ? '#b84a24' : '#b84a24';
-  const obstacleStroke = dark ? '#6e260f' : '#6e260f';
-  const hitHalo = dark ? 'rgba(210,0,0,0.65)' : 'rgba(210,0,0,0.65)';
+  const palette = getGridPalette();
+  const rimA      = isRecordRun ? 'rgba(94,203,119,' : palette.rimA;
+  const edgeColor = isRecordRun ? 'rgba(94,203,119,0.55)' : palette.edgeColor;
+  const gridA     = isRecordRun ? 'rgba(94,203,119,0.25)' : palette.gridColor;
+  const obstacleFill = '#b84a24';
+  const obstacleStroke = '#6e260f';
+  const hitHalo = 'rgba(210,0,0,0.65)';
   const frontSlice = getSlice(0);
   const backSlice  = getSlice(1);
   const leftFront  = arcPoint(frontSlice.cx, frontSlice.cy, frontSlice.r, -Math.PI/2);
   const rightFront = arcPoint(frontSlice.cx, frontSlice.cy, frontSlice.r,  Math.PI/2);
   const leftBack   = arcPoint(backSlice.cx,  backSlice.cy,  backSlice.r,  -Math.PI/2);
   const rightBack  = arcPoint(backSlice.cx,  backSlice.cy,  backSlice.r,   Math.PI/2);
+
+  drawRainbowBanner();
 
   ctx.beginPath(); ctx.moveTo(leftFront.x, leftFront.y); ctx.lineTo(leftBack.x, leftBack.y);
   ctx.strokeStyle = edgeColor; ctx.lineWidth = 1.5; ctx.stroke();
@@ -620,6 +737,7 @@ function draw() {
   ctx.beginPath();
   ctx.arc(frontSlice.cx, frontSlice.cy, frontSlice.r, 0, Math.PI);
   ctx.strokeStyle = rimA + '0.9)'; ctx.lineWidth = 3; ctx.stroke();
+  drawEndpointStars(leftFront, rightFront, now);
 
   const obstaclesCopy = [...obstacles].sort((a, b) => b.z - a.z);
   for (const obstacle of obstaclesCopy) {
@@ -651,12 +769,14 @@ function draw() {
   const ty = -Math.sin(playerAngle);
   const leanX = -nx * Math.cos(headingAngle) + tx * Math.sin(headingAngle);
   const leanY = -ny * Math.cos(headingAngle) + ty * Math.sin(headingAngle);
-  const playerColor = dark ? '#e8e0ff' : '#3c34a0';
+  const playerColor = '#e8e0ff';
   ctx.beginPath(); ctx.moveTo(playerCircle.x, playerCircle.y);
   ctx.lineTo(playerCircle.x + leanX * settings.player.playerHeight * playerCircle.scale, playerCircle.y + leanY * settings.player.playerHeight * playerCircle.scale);
   ctx.strokeStyle = playerColor; ctx.lineWidth = 3.5 * playerCircle.scale; ctx.lineCap = 'round'; ctx.stroke();
   ctx.beginPath(); ctx.arc(playerCircle.x, playerCircle.y, playerCircle.r, 0, Math.PI * 2);
   ctx.fillStyle = playerColor; ctx.fill();
+
+  drawMilestone(now);
 }
 
 let lastFrameTime = performance.now();
